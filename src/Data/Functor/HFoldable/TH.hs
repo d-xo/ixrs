@@ -1,1 +1,1 @@
-module Data.Functor.Foldable.TH where
+module Data.Functor.HFoldable.TH where

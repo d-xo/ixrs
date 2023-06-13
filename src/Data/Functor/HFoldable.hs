@@ -10,7 +10,7 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE GADTs #-}
 
-module Data.Functor.Foldable where
+module Data.Functor.HFoldable where
 
 import Data.Kind (Type)
 import Control.Monad ((<=<))

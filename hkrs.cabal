@@ -11,7 +11,8 @@ common warnings
 
 library
     import:           warnings
-    exposed-modules:  Data.Functor.HFoldable Data.Functor.HFoldable.TH
+    exposed-modules:  Data.Functor.HFoldable
+                      Data.Functor.HFoldable.TH
     other-modules:    Test.Expr
     build-depends:    base,
                       text,
