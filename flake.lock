@@ -33,6 +33,22 @@
         "type": "github"
       }
     },
+    "hypertypes": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1685912498,
+        "narHash": "sha256-y7n1ld9F2Qkhb+D71X8pCtRBeWaqNqKx3znItA/SG40=",
+        "owner": "lamdu",
+        "repo": "hypertypes",
+        "rev": "3d72e03552f9a0411a9b1f57e06f40487c3e12f9",
+        "type": "github"
+      },
+      "original": {
+        "owner": "lamdu",
+        "repo": "hypertypes",
+        "type": "github"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1686519857,
@@ -71,6 +87,7 @@
       "inputs": {
         "flake-parts": "flake-parts",
         "haskell-flake": "haskell-flake",
+        "hypertypes": "hypertypes",
         "nixpkgs": "nixpkgs"
       }
     }
