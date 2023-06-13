@@ -18,5 +18,7 @@ data ExpF (r :: Ty -> Type) (t :: Ty) where
   Eq  :: r t -> r t -> ExpF r Boolean
   And :: r Boolean -> r Boolean -> ExpF r Boolean
 
+type Exp = Term ExpF
+
 main :: IO ()
 main = putStrLn "Hello, Haskell!"
