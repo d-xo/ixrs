@@ -41,6 +41,7 @@ data ExpF (r :: Ty -> Type) (t :: Ty) where
   AndF :: r Boolean -> r Boolean -> ExpF r Boolean
   -}
 
+  {-
 instance HFunctor ExpF where
   hfmap f = \case
     AddF l r -> AddF (f l) (f r)
@@ -58,6 +59,7 @@ instance HFoldable ExpF where
     AndF l r -> f l <> f r
     LitIntF _ -> mempty
     VarF _ -> mempty
+  -}
 
 instance HTraversable ExpF where
   htraverse f = \case

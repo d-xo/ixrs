@@ -9,39 +9,36 @@ import Control.Monad
 import Data.Traversable
 import Text.Read.Lex
 import Data.Maybe
+import Data.List
 
 makeBaseFunctor :: Name -> Q [Dec]
 makeBaseFunctor tyName = do
   (TyConI tyCon) <- reify tyName
   datatypeinfo <- reifyDatatype tyName
-  rName <- newName "r"
 
   let cons = datatypeCons datatypeinfo
-      -- variable parameters
-      vars = map toTyVarBndr $ datatypeInstTypes datatypeinfo
-      vars' = map VarT (typeVars vars)
-      -- Name of base functor
-      tyNameF = toFName tyName
-      -- Recursive type
-      s = conAppsT tyName vars'
-      -- Additional argument
-      r = VarT rName
-      -- Vars
-      varsF = vars ++ [plainTV rName]
+      mkInstance s n = InstanceD Nothing [] (ConT n `AppT` ConT s)
 
-      mkInstance n = InstanceD Nothing [] (ConT n `AppT` ConT tyName)
-
+  -- pattern functor
   patternFunc <- mkPatternFunc tyName tyCon
+
+  -- functor instance
+  hfmapDec <- FunD (mkName "hfmap") <$> mkhfmap tyName cons
+  let hfunctorDec = mkInstance (toFName tyName) (mkName "HFunctor") [hfmapDec]
+
+  -- foldable instance
+  hfoldmapDec <- FunD (mkName "hfoldMap") <$> mkhfoldmap tyName cons
+  let hfoldableDec = mkInstance (toFName tyName) (mkName "HFoldable") [hfoldmapDec]
 
   -- instance Recursive
   projDec <- FunD (mkName "hproject") <$> mkMorphism id toFName cons
-  let recursiveDec = mkInstance (mkName "HRecursive") [projDec]
+  let hrecursiveDec = mkInstance tyName (mkName "HRecursive") [projDec]
 
   -- instance Corecursive
   embedDec <- FunD (mkName "hembed") <$> mkMorphism toFName id cons
-  let corecursiveDec = mkInstance (mkName "HCorecursive") [embedDec]
+  let hcorecursiveDec = mkInstance tyName (mkName "HCorecursive") [embedDec]
 
-  pure [patternFunc, recursiveDec, corecursiveDec]
+  pure [patternFunc, hfunctorDec, hfoldableDec, hrecursiveDec, hcorecursiveDec]
 
 mkPatternFunc :: Name -> Dec -> Q Dec
 mkPatternFunc ty (DataD constraints name tyvars kind constructors derivs) = do
@@ -110,6 +107,59 @@ mkMorphism nFrom nTo args = for args $ \ci -> do
     pure $ Clause [ConP (nFrom n) [] (map VarP fs)]                   -- patterns
                   (NormalB $ foldl AppE (ConE $ nTo n) (map VarE fs)) -- body
                   []                                                  -- where dec
+
+-- | makes clauses to rename constructors
+mkhfmap :: Name -> [ConstructorInfo] -> Q [Clause]
+mkhfmap tyName cs = for cs $ \ci -> do
+  let
+    -- is the given type an application of `tyName`?
+    shouldRec (AppT (ConT nm) _) = nm == tyName
+    shouldRec _ = False
+    shouldRecFields = fmap shouldRec (constructorFields ci)
+
+  -- only generate a named function arg if we actually need to use it
+  func <- if or shouldRecFields then newName "f" else newName "_"
+
+  -- apply func to any args that are an instance of `tyName`
+  fs <- forM shouldRecFields $ \b -> do
+    nm <- newName "x"
+    let expr = if b then AppE (VarE func) (VarE nm) else VarE nm
+    pure (nm, expr)
+
+  let fname = toFName (constructorName ci)
+  pure $ Clause [VarP func, ConP fname [] (map (VarP . fst) fs)]    -- patterns
+                (NormalB $ foldl AppE (ConE fname) (map snd fs))    -- body
+                []                                                  -- where dec
+
+-- | makes clauses to rename constructors
+mkhfoldmap :: Name -> [ConstructorInfo] -> Q [Clause]
+mkhfoldmap tyName cs = for cs $ \ci -> do
+  let
+    -- is the given type an application of `tyName`?
+    shouldRec (AppT (ConT nm) _) = nm == tyName
+    shouldRec _ = False
+    shouldRecFields = fmap shouldRec (constructorFields ci)
+
+  -- only generate a named function arg if we actually need to use it
+  func <- if or shouldRecFields then newName "f" else newName "_"
+
+  -- apply func to any args that are an instance of `tyName`
+  fs <- forM shouldRecFields $ \b ->
+    if b then do
+      nm <- newName "x"
+      let expr = AppE (VarE func) (VarE nm)
+      pure (nm, expr)
+    else do
+      nm <- newName "_"
+      let expr = VarE (mkName "mempty")
+      pure (nm, expr)
+
+  let fname = toFName (constructorName ci)
+      comb l = UInfixE l (VarE $ mkName "<>")
+
+  pure $ Clause [VarP func, ConP fname [] (map (VarP . fst) fs)]          -- patterns
+                (NormalB $ foldl comb (VarE $ mkName "mempty") (map snd fs))  -- body
+                []                                                        -- where dec
 
 
 fromTyVarBndr :: TyVarBndr () -> Kind
