@@ -7,7 +7,7 @@ maintainer:      hackage@d-xo.org
 build-type:      Simple
 
 common warnings
-    ghc-options: -Wall
+    ghc-options: -Wall -ddump-splices
 
 library
     import:           warnings
@@ -17,5 +17,6 @@ library
     build-depends:    base,
                       text,
                       template-haskell,
+                      th-abstraction
     hs-source-dirs:   src
     default-language: GHC2021

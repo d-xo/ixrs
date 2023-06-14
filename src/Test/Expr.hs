@@ -1,22 +1,16 @@
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE ScopedTypeVariables #-}
-{-# LANGUAGE AllowAmbiguousTypes #-}
-{-# LANGUAGE PolyKinds #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
-{-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE TypeFamilies #-}
-{-# LANGUAGE GADTs #-}
 
 {-# OPTIONS_GHC -Wno-unticked-promoted-constructors #-}
 
-module Test.Expr() where
+module Test.Expr where
 
 import Data.Functor.HFoldable
+import Data.Functor.HFoldable.TH
 import Data.Text (Text)
-import Data.Kind
 import Control.Applicative
 
 --- Datatypes ---
@@ -33,8 +27,11 @@ data Exp (t :: Ty) where
   Eq  :: Exp t -> Exp t -> Exp Boolean
   And :: Exp Boolean -> Exp Boolean -> Exp Boolean
 
+$(makeBaseFunctor ''Exp)
+
 --- Define Pattern Functor ---
 
+  {-
 data ExpF (r :: Ty -> Type) (t :: Ty) where
   VarF :: Text -> ExpF r t
   LitIntF :: Integer -> ExpF r Number
@@ -42,6 +39,7 @@ data ExpF (r :: Ty -> Type) (t :: Ty) where
   SubF :: r Number -> r Number -> ExpF r Number
   EqF  :: r t -> r t -> ExpF r Boolean
   AndF :: r Boolean -> r Boolean -> ExpF r Boolean
+  -}
 
 instance HFunctor ExpF where
   hfmap f = \case
@@ -74,6 +72,7 @@ instance HTraversable ExpF where
 
 type instance HBase Exp = ExpF
 
+{-
 instance HRecursive Exp where
   hproject = \case
     Add x y -> AddF x y
@@ -91,3 +90,42 @@ instance HCorecursive Exp where
     AndF x y -> And x y
     LitIntF n -> LitInt n
     VarF n -> Var n
+-}
+
+--- Do Stuff :) ---
+
+data Value (ix :: Ty) where
+    VInt  :: Integer -> Value Number
+    VBool :: Bool -> Value Boolean
+    VNone :: Value ix
+
+deriving instance Show (Value ix)
+
+eval :: Exp a -> Value a
+eval = hcata $ \case
+  AddF (VInt x) (VInt y) -> VInt (x + y)
+  SubF (VInt x) (VInt y) -> VInt (x - y)
+  EqF x y -> case (x,y) of
+    (VInt l, VInt r) -> VBool (l == r)
+    (VBool l, VBool r) -> VBool (l == r)
+    _ -> VNone
+  AndF (VBool x) (VBool y) -> VBool (x && y)
+  LitIntF n -> VInt n
+  _ -> VNone
+
+freevars :: Exp a -> [Text]
+freevars = getConst . hcata go
+  where
+    go = \case
+      (VarF n) -> Const [n]
+      r -> Const $ hfoldMap getConst r
+
+test :: IO ()
+test = do
+  print $ eval (Add (LitInt 10) (LitInt 25))
+  print $ eval (Add (LitInt 10) (Var "a"))
+  -- TODO: this should be (VBool True) but currently evals to VNone...
+  print $ eval (And (Eq (LitInt 10) (LitInt 10)) (And (Var "a") (Var "a")))
+  print $ freevars (And (Eq (LitInt 10) (LitInt 10)) (And (Var "a") (Var "c")))
+  pure ()
+
