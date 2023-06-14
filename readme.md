@@ -64,17 +64,51 @@ data Ty
 data Exp (t :: Ty) where
   Var :: Text -> Exp t
   LitInt :: Integer -> Exp Number
+  LitBool :: Bool -> Exp Boolean
   Add :: Exp Number -> Exp Number -> Exp Number
   Sub :: Exp Number -> Exp Number -> Exp Number
   Eq  :: Exp t -> Exp t -> Exp Boolean
   And :: Exp Boolean -> Exp Boolean -> Exp Boolean
 
+deriving instance (Show (Exp a))
 $(makeBaseFunctor ''Exp)
 ```
 
 Thats it! Now we can start to write some algebras :)
 
 ```haskell
+-- | Gather all free variables in the AST
+freevars :: Exp a -> Set Text
+freevars = getConst . hcata go
+  where
+    -- since we want to return an unindexed type, we have to use the
+    -- `Const` functor when defining our algebra
+    go :: ExpF (Const (Set Text)) a -> Const (Set Text) a
+    go = \case
+      (VarF n) -> Const $ Set.singleton n
+      r -> Const $ hfoldMap getConst r
+
+-- | Evaluates an expression down to it's most concrete form
+eval :: Exp a -> Exp a
+eval = hcata $ \case
+  AddF (LitInt x) (LitInt y) -> LitInt (x + y)
+  SubF (LitInt x) (LitInt y) -> LitInt (x - y)
+  EqF x y -> case (x,y) of
+    (LitInt l, LitInt r) -> LitBool (l == r)
+    (LitBool l, LitBool r) -> LitBool (l == r)
+    (Var l, Var r) -> LitBool (l == r)
+    _ -> Eq x y
+  AndF (LitBool x) (LitBool y) -> LitBool (x && y)
+  LitIntF n -> LitInt n
+  LitBoolF n -> LitBool n
+  e -> hembed e
+
+main :: IO ()
+main = do
+  print $ eval (Add (LitInt 10) (LitInt 25))
+  print $ eval (Add (LitInt 10) (Var "a"))
+  print $ eval (And (Eq (LitInt 10) (LitInt 10)) (And (Var "a") (Var "a")))
+  print $ freevars (And (Eq (LitInt 10) (LitInt 10)) (And (Var "a") (Var "c")))
 ```
 
 ## Template Haskell
@@ -86,6 +120,7 @@ The template haskell splice will generate roughly the following:
 data ExpF (r :: Ty -> Type) (t :: Ty) where
   VarF :: Text -> ExpF r t
   LitIntF :: Integer -> ExpF r Number
+  LitBoolF :: Bool -> ExpF r Boolean
   AddF :: r Number -> r Number -> ExpF r Number
   SubF :: r Number -> r Number -> ExpF r Number
   EqF  :: r t -> r t -> ExpF r Boolean
@@ -102,6 +137,7 @@ instance HFunctor ExpF where
     EqF l r -> EqF (f l) (f r)
     AndF l r -> AndF (f l) (f r)
     LitIntF i -> LitIntF i
+    LitBoolF i -> LitBoolF i
     VarF t -> VarF t
 
 -- | HFoldable
@@ -112,6 +148,7 @@ instance HFoldable ExpF where
     EqF l r -> f l <> f r
     AndF l r -> f l <> f r
     LitIntF _ -> mempty
+    LitBoolF _ -> mempty
     VarF _ -> mempty
 
 -- | HTraversable
@@ -122,6 +159,7 @@ instance HTraversable ExpF where
     EqF l r -> liftA2 EqF (f l) (f r)
     AndF l r -> liftA2 AndF (f l) (f r)
     LitIntF i -> pure (LitIntF i)
+    LitBoolF i -> pure (LitBoolF i)
     VarF n -> pure (VarF n)
 
 -- | Project Exp to ExpF
@@ -132,6 +170,7 @@ instance HRecursive Exp where
     Eq x y -> EqF x y
     And x y -> AndF x y
     LitInt n -> LitIntF n
+    LitBool n -> LitBoolF n
     Var n -> VarF n
 
 -- | Project ExpF to Exp
@@ -142,39 +181,6 @@ instance HCorecursive Exp where
     EqF x y -> Eq x y
     AndF x y -> And x y
     LitIntF n -> LitInt n
+    LitBoolF n -> LitBool n
     VarF n -> Var n
-```
-
-
-```
---- Do Recursion :)  ---
-
-
-data Value (ix :: Ty) where
-    VInt  :: Integer -> Value Number
-    VBool :: Bool -> Value Boolean
-    VNone :: Value ix
-
-deriving instance Show (Value ix)
-
-eval :: Exp a -> Value a
-eval = hcata $ \case
-  AddF (VInt x) (VInt y) -> VInt (x + y)
-  SubF (VInt x) (VInt y) -> VInt (x - y)
-  EqF x y -> case (x,y) of
-    (VInt l, VInt r) -> VBool (l == r)
-    (VBool l, VBool r) -> VBool (l == r)
-    _ -> VNone
-  AndF (VBool x) (VBool y) -> VBool (x && y)
-  LitIntF n -> VInt n
-  _ -> VNone
-
-
-test :: IO ()
-test = do
-  print $ eval (Add (LitInt 10) (LitInt 25))
-  print $ eval (Add (LitInt 10) (Var "a"))
-  -- TODO: this should be (VBool True) but currently evals to VNone...
-  print $ eval (And (Eq (LitInt 10) (LitInt 10)) (And (Var "a") (Var "a")))
-  pure ()
 ```

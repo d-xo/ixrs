@@ -17,6 +17,7 @@ library
     build-depends:    base,
                       text,
                       template-haskell,
-                      th-abstraction
+                      th-abstraction,
+                      containers
     hs-source-dirs:   src
     default-language: GHC2021
