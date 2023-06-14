@@ -9,7 +9,6 @@ import Control.Monad
 import Data.Traversable
 import Text.Read.Lex
 import Data.Maybe
-import Data.List
 
 makeBaseFunctor :: Name -> Q [Dec]
 makeBaseFunctor tyName = do
@@ -22,6 +21,9 @@ makeBaseFunctor tyName = do
   -- pattern functor
   patternFunc <- mkPatternFunc tyName tyCon
 
+  -- base instance declaration
+  let tyInstDec = TySynInstD (TySynEqn Nothing (AppT (ConT $ mkName "HBase") (ConT tyName)) (ConT $ toFName tyName))
+
   -- functor instance
   hfmapDec <- FunD (mkName "hfmap") <$> mkhfmap tyName cons
   let hfunctorDec = mkInstance (toFName tyName) (mkName "HFunctor") [hfmapDec]
@@ -29,6 +31,10 @@ makeBaseFunctor tyName = do
   -- foldable instance
   hfoldmapDec <- FunD (mkName "hfoldMap") <$> mkhfoldmap tyName cons
   let hfoldableDec = mkInstance (toFName tyName) (mkName "HFoldable") [hfoldmapDec]
+
+  -- traversable instance
+  htraverseDec <- FunD (mkName "htraverse") <$> mkhtraverse tyName cons
+  let htraversableDec = mkInstance (toFName tyName) (mkName "HTraversable") [htraverseDec]
 
   -- instance Recursive
   projDec <- FunD (mkName "hproject") <$> mkMorphism id toFName cons
@@ -38,7 +44,7 @@ makeBaseFunctor tyName = do
   embedDec <- FunD (mkName "hembed") <$> mkMorphism toFName id cons
   let hcorecursiveDec = mkInstance tyName (mkName "HCorecursive") [embedDec]
 
-  pure [patternFunc, hfunctorDec, hfoldableDec, hrecursiveDec, hcorecursiveDec]
+  pure [patternFunc, tyInstDec, hfunctorDec, hfoldableDec, htraversableDec, hrecursiveDec, hcorecursiveDec]
 
 mkPatternFunc :: Name -> Dec -> Q Dec
 mkPatternFunc ty (DataD constraints name tyvars kind constructors derivs) = do
@@ -155,10 +161,43 @@ mkhfoldmap tyName cs = for cs $ \ci -> do
       pure (nm, expr)
 
   let fname = toFName (constructorName ci)
-      comb l = UInfixE l (VarE $ mkName "<>")
+      combine l r = UInfixE l (VarE $ mkName "<>") r
 
   pure $ Clause [VarP func, ConP fname [] (map (VarP . fst) fs)]          -- patterns
-                (NormalB $ foldl comb (VarE $ mkName "mempty") (map snd fs))  -- body
+                (NormalB $ foldl combine (VarE $ mkName "mempty") (map snd fs))  -- body
+                []                                                        -- where dec
+
+-- | makes clauses to rename constructors
+mkhtraverse :: Name -> [ConstructorInfo] -> Q [Clause]
+mkhtraverse tyName cs = for cs $ \ci -> do
+  let
+    -- is the given type an application of `tyName`?
+    shouldRec (AppT (ConT nm) _) = nm == tyName
+    shouldRec _ = False
+    shouldRecFields = fmap shouldRec (constructorFields ci)
+
+  -- only generate a named function arg :set -XTemplateHaskellif we actually need to use it
+  func <- if or shouldRecFields then newName "f" else newName "_"
+
+  -- apply func to any args that are an instance of `tyName`
+  names <- forM shouldRecFields $ \b -> do
+    nm <- newName "x"
+    pure (b, nm)
+
+  stmts <- forM names $ \(b, nm) ->
+    if b
+    then do
+      sNm <- newName "s"
+      let s = BindS (VarP sNm) (AppE (VarE func) (VarE nm))
+      pure (VarE sNm, Just s)
+    else pure (VarE nm, Nothing)
+
+
+  let fname = toFName (constructorName ci)
+      body = mapMaybe snd stmts <> [NoBindS $ AppE (VarE $ mkName "pure") $ foldl AppE (ConE fname) (map fst stmts)]
+
+  pure $ Clause [VarP func, ConP fname [] (map (VarP . snd) names)]          -- patterns
+                (NormalB $ DoE Nothing body)  -- body
                 []                                                        -- where dec
 
 

@@ -1,4 +1,5 @@
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE ApplicativeDo #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE DataKinds #-}
 {-# LANGUAGE LambdaCase #-}
@@ -59,7 +60,6 @@ instance HFoldable ExpF where
     AndF l r -> f l <> f r
     LitIntF _ -> mempty
     VarF _ -> mempty
-  -}
 
 instance HTraversable ExpF where
   htraverse f = \case
@@ -69,10 +69,11 @@ instance HTraversable ExpF where
     AndF l r -> liftA2 AndF (f l) (f r)
     LitIntF i -> pure (LitIntF i)
     VarF n -> pure (VarF n)
+  -}
 
 --- Link Pattern Functor to Main Type ---
 
-type instance HBase Exp = ExpF
+--type instance HBase Exp = ExpF
 
 {-
 instance HRecursive Exp where
