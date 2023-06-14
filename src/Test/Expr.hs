@@ -30,72 +30,13 @@ data Exp (t :: Ty) where
 
 $(makeBaseFunctor ''Exp)
 
---- Define Pattern Functor ---
-
-  {-
-data ExpF (r :: Ty -> Type) (t :: Ty) where
-  VarF :: Text -> ExpF r t
-  LitIntF :: Integer -> ExpF r Number
-  AddF :: r Number -> r Number -> ExpF r Number
-  SubF :: r Number -> r Number -> ExpF r Number
-  EqF  :: r t -> r t -> ExpF r Boolean
-  AndF :: r Boolean -> r Boolean -> ExpF r Boolean
-  -}
-
-  {-
-instance HFunctor ExpF where
-  hfmap f = \case
-    AddF l r -> AddF (f l) (f r)
-    SubF l r -> SubF (f l) (f r)
-    EqF l r -> EqF (f l) (f r)
-    AndF l r -> AndF (f l) (f r)
-    LitIntF i -> LitIntF i
-    VarF t -> VarF t
-
-instance HFoldable ExpF where
-  hfoldMap f = \case
-    AddF l r -> f l <> f r
-    SubF l r -> f l <> f r
-    EqF l r -> f l <> f r
-    AndF l r -> f l <> f r
-    LitIntF _ -> mempty
-    VarF _ -> mempty
-
-instance HTraversable ExpF where
-  htraverse f = \case
-    AddF l r -> liftA2 AddF (f l) (f r)
-    SubF l r -> liftA2 SubF (f l) (f r)
-    EqF l r -> liftA2 EqF (f l) (f r)
-    AndF l r -> liftA2 AndF (f l) (f r)
-    LitIntF i -> pure (LitIntF i)
-    VarF n -> pure (VarF n)
-  -}
-
---- Link Pattern Functor to Main Type ---
-
---type instance HBase Exp = ExpF
-
-{-
-instance HRecursive Exp where
-  hproject = \case
-    Add x y -> AddF x y
-    Sub x y -> SubF x y
-    Eq x y -> EqF x y
-    And x y -> AndF x y
-    LitInt n -> LitIntF n
-    Var n -> VarF n
-
-instance HCorecursive Exp where
-  hembed = \case
-    AddF x y -> Add x y
-    SubF x y -> Sub x y
-    EqF x y -> Eq x y
-    AndF x y -> And x y
-    LitIntF n -> LitInt n
-    VarF n -> Var n
--}
-
---- Do Stuff :) ---
+-- | Gather all free variables in the AST
+freevars :: Exp a -> [Text]
+freevars = getConst . hcata go
+  where
+    go = \case
+      (VarF n) -> Const [n]
+      r -> Const $ hfoldMap getConst r
 
 data Value (ix :: Ty) where
     VInt  :: Integer -> Value Number
@@ -115,13 +56,6 @@ eval = hcata $ \case
   AndF (VBool x) (VBool y) -> VBool (x && y)
   LitIntF n -> VInt n
   _ -> VNone
-
-freevars :: Exp a -> [Text]
-freevars = getConst . hcata go
-  where
-    go = \case
-      (VarF n) -> Const [n]
-      r -> Const $ hfoldMap getConst r
 
 test :: IO ()
 test = do
