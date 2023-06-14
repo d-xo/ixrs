@@ -19,7 +19,7 @@
             parameterized-utils.broken = false;
           };
         };
-        packages.default = self'.packages.hkrs;
+        packages.default = self'.packages.ixrs;
       };
     };
 }

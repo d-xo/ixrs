@@ -1,5 +1,5 @@
 cabal-version:   3.0
-name:            hkrs
+name:            ixrs
 version:         0.1.0.0
 license:         AGPL-3.0-only
 author:          dxo
@@ -7,7 +7,7 @@ maintainer:      hackage@d-xo.org
 build-type:      Simple
 
 common warnings
-    ghc-options: -Wall -ddump-splices
+    ghc-options: -Wall -- -ddump-splices
 
 library
     import:           warnings
